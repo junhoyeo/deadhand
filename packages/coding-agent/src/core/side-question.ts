@@ -10,6 +10,7 @@ import {
 	shouldCompact,
 } from "./compaction/index.js";
 import { convertToLlm, createCompactionSummaryMessage } from "./messages.js";
+import type { SideQuestionRecorder } from "./side-question-store.js";
 
 export type SideQuestionStatus = "running" | "complete" | "cancelled" | "error";
 
@@ -34,6 +35,11 @@ export interface SideQuestionRun {
 export interface SideQuestionDependencies {
 	getCompactionSettings(): CompactionSettings;
 	getRequestAuth(model: Model<Api>): Promise<{ apiKey: string; headers?: Record<string, string> }>;
+	/**
+	 * Persists settled turns to a side transcript. Optional: callers without a
+	 * persisted parent session (tests, headless runs) simply do not record.
+	 */
+	recorder?: SideQuestionRecorder;
 }
 
 const SIDE_QUESTION_INSTRUCTION =
@@ -533,7 +539,19 @@ export function startSideQuestion(
 				}
 			}
 
+			// Persist the settled turn before announcing the outcome: the answer the
+			// user sees and the answer on disk must not diverge. Recording is
+			// best-effort and never throws, so it cannot block the event.
+			//
+			// A failed turn is recorded too. Providers can return partial text and
+			// real usage alongside an error, and dropping it would make that spend
+			// unrecoverable while leaving the retry's transcript missing the turn
+			// the user actually saw.
+			if (response) {
+				dependencies?.recorder?.recordTurn(question, response);
+			}
 			if (response?.stopReason === "error") {
+				dependencies?.recorder?.recordStatus("error", response.errorMessage ?? "Side question failed");
 				await emit("error", response.errorMessage ?? "Side question failed");
 				return;
 			}
@@ -541,6 +559,10 @@ export function startSideQuestion(
 		})
 		.catch(async (error) => {
 			const errorMessage = error instanceof Error ? error.message : String(error);
+			dependencies?.recorder?.recordStatus(
+				abortRequested ? "cancelled" : "error",
+				abortRequested ? undefined : errorMessage,
+			);
 			await Promise.resolve(
 				emit(abortRequested ? "cancelled" : "error", abortRequested ? undefined : errorMessage),
 			).catch(() => undefined);

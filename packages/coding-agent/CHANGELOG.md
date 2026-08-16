@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Added durable `/btw` side-conversation storage: each pane is recorded as a linked sub-session under `session-artifacts/<parent>/btw-<id>/`, with a single `custom` pointer entry in the parent, so side questions and the tokens they spend are no longer discarded when the pane closes. Side questions still never enter the main session context.
 - Added `compat.supportsFastMode` in `models.json` so `/fast` works for an `openai-responses` model served through a proxy or gateway that forwards `service_tier`.
 - Fixed `/btw` side panes remaining stuck in a running state when the final daemon event was lost during reconnect.
 - Fixed multi-turn `/btw` side conversations exhausting large model contexts by compacting their transient in-memory history while preserving recent follow-ups.

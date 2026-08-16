@@ -1530,6 +1530,7 @@ export class DaemonAgentConnection implements AgentConnection {
 		id: string,
 		question: string,
 		previousTurns?: AgentConnectionSideQuestionTurn[],
+		paneId?: string,
 	): Promise<void> {
 		if (previousTurns?.length && !this.client.supportsServerCapability("side_question_transcript")) {
 			// An older daemon would silently ignore previousTurns and answer the
@@ -1546,6 +1547,7 @@ export class DaemonAgentConnection implements AgentConnection {
 				sideQuestionId: id,
 				question,
 				previousTurns,
+				paneId,
 			});
 		} catch (error) {
 			this.activeSideQuestionIds.delete(id);
