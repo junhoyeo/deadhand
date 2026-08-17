@@ -219,12 +219,13 @@ describe("ENG-4656 active session resume", () => {
 
 		await expect(connection.switchSession("/tmp/target-active.jsonl")).resolves.toEqual({ cancelled: false });
 
-		expect(client.requests.map((request) => request.type)).toEqual(["attach", "switch_session", "reattach"]);
-		expect(client.requests[2]).toMatchObject({
-			type: "reattach",
-			activeSessionId: sourceActiveSessionId,
-			targetActiveSessionId,
-		});
+		// The per-socket `reattach` command was removed as race-prone in favour of a
+		// plain attach to the target followed by a detach of the source. The resume
+		// guarantee this regression guards is the resulting state and the
+		// `session_replaced` event below, not the wire sequence that produces them.
+		expect(client.requests.map((request) => request.type)).toEqual(["attach", "switch_session", "attach", "detach"]);
+		expect(client.requests[2]).toMatchObject({ type: "attach" });
+		expect(client.requests[3]).toMatchObject({ type: "detach" });
 		await expect(connection.getState()).resolves.toMatchObject({
 			activeSessionId: targetActiveSessionId,
 			sessionId: `${targetActiveSessionId}-session`,
