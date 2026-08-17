@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Agent, type AgentMessage, type StreamFn } from "@earendil-works/pi-agent-core";
@@ -22,6 +22,7 @@ import {
 import { AgentSession } from "../src/core/agent-session.js";
 import { AuthStorage } from "../src/core/auth-storage.js";
 import type { LoadExtensionsResult } from "../src/core/extensions/index.js";
+import { ensureKernelPython } from "../src/core/kernel/bootstrap.js";
 import { type HostRequestHandlers, KernelManager } from "../src/core/kernel/index.js";
 import { convertToLlm } from "../src/core/messages.js";
 import { ModelRegistry } from "../src/core/model-registry.js";
@@ -2179,9 +2180,13 @@ describe("AgentSession rlm recursion", () => {
 		expect(child.rlmMaxDepth).toBe(3);
 	});
 
-	it("lets a stale kernel depth cap defer to the live host gate", () => {
-		const python =
-			process.env.PRIME_AGENT_KERNEL_PYTHON ?? join(homedir(), ".prime", "agent", "kernel-venv", "bin", "python");
+	it("lets a stale kernel depth cap defer to the live host gate", async () => {
+		// Resolve the kernel the way the runtime does. The hardcoded
+		// ~/.prime/agent/kernel-venv only exists on machines that still carry a
+		// base venv; a freshly bootstrapped one publishes a generation instead, so
+		// spawnSync found no binary and left status and stderr null - which read as
+		// a pass on the status assertion and an unrelated type error on the next.
+		const python = process.env.PRIME_AGENT_KERNEL_PYTHON ?? (await ensureKernelPython());
 		const runtime = join(process.cwd(), "..", "..", "prime-agent-runtime", "src");
 		const probe = spawnSync(
 			python,
@@ -2192,6 +2197,10 @@ describe("AgentSession rlm recursion", () => {
 			},
 		);
 
+		// Asserted before the status check: a failed spawn also reports a non-zero
+		// status, so without this the probe never running looks like the probe
+		// failing for the reason under test.
+		expect(probe.error).toBeUndefined();
 		expect(probe.status).not.toBe(0);
 		expect(probe.stderr).toContain("Jupyter comm support is unavailable in this kernel");
 		expect(probe.stderr).not.toContain("RLM recursion depth limit reached");
