@@ -68,8 +68,13 @@ export interface SideQuestionStatusRecord {
  * recorder disables itself after the first error instead of propagating.
  */
 export interface SideQuestionRecorder {
-	/** Record a completed turn. `assistant` carries the usage for that turn. */
-	recordTurn(question: string, assistant: AssistantMessage): void;
+	/**
+	 * Record a completed turn. `assistant` carries the usage for the answer the
+	 * user kept. `auxiliary` carries any other completions the run paid for —
+	 * compaction summaries and a context-overflow answer that was retried — so
+	 * the transcript accounts for the whole run, not only its final call.
+	 */
+	recordTurn(question: string, assistant: AssistantMessage, auxiliary?: readonly AssistantMessage[]): void;
 	/** Record how the pane settled. Ignored when no turn was ever recorded. */
 	recordStatus(status: SideQuestionRecordStatus, errorMessage?: string): void;
 }
@@ -144,12 +149,19 @@ export function createSideQuestionStore(options: SideQuestionStoreOptions): Side
 		// hang off a parentId that no reader can resolve, truncating the session on
 		// reopen. Side-question storage must never be able to damage the parent.
 		parent.appendCustomEntryWithRollback(SIDE_QUESTION_POINTER_TYPE, pointer);
+		// The append alone is not durable on a brand-new parent: _persist drops
+		// non-lifecycle entries until an assistant message exists, so a /btw that
+		// settles before the parent's first response would leave the pointer in
+		// memory only. The transcript itself is flushed by its own assistant
+		// message, so an abrupt exit there orphans it and loses the sole link back
+		// to the parent. flushNow bypasses that guard.
+		parent.flushNow();
 		manager = created;
 		return created;
 	};
 
 	return {
-		recordTurn(question: string, assistant: AssistantMessage): void {
+		recordTurn(question: string, assistant: AssistantMessage, auxiliary?: readonly AssistantMessage[]): void {
 			if (disabled) {
 				return;
 			}
@@ -163,6 +175,13 @@ export function createSideQuestionStore(options: SideQuestionStoreOptions): Side
 					content: [{ type: "text", text: question }],
 					timestamp: Date.now(),
 				});
+				// Compaction summaries and a context-overflow answer that was retried
+				// are real completions with real usage. They precede the answer the
+				// user kept, so they are written first and the transcript totals the
+				// whole run rather than just its last call.
+				for (const completion of auxiliary ?? []) {
+					target.appendMessage(completion);
+				}
 				target.appendMessage(assistant);
 			} catch (error) {
 				disabled = true;

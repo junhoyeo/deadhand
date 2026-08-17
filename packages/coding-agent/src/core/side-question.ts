@@ -227,6 +227,7 @@ async function generateBoundedSideSummary(
 	headers: Record<string, string> | undefined,
 	signal: AbortSignal,
 	parent: Agent,
+	onCompletion?: (message: AssistantMessage) => void,
 ): Promise<string | undefined> {
 	const budget = getSideSummaryBudget(model, settings.reserveTokens);
 	if (!budget) return undefined;
@@ -258,6 +259,7 @@ async function generateBoundedSideSummary(
 						serviceTier: parent.state.serviceTier,
 						sessionId: parent.sessionId,
 						maxRetryDelayMs: parent.maxRetryDelayMs,
+						onCompletion,
 					},
 				),
 			);
@@ -298,6 +300,7 @@ async function compactSideContext(
 	fixedOverheadTokens: number,
 	prompt: string,
 	aggressive = false,
+	onCompletion?: (message: AssistantMessage) => void,
 ): Promise<AgentMessage[] | undefined> {
 	const targetTokens = answerContextTarget(model, fixedOverheadTokens, prompt, aggressive);
 	if (targetTokens <= 0) return undefined;
@@ -352,7 +355,16 @@ async function compactSideContext(
 			let summary = summaryCache.get(key);
 			if (!summary) {
 				const removable = turns.slice(gap.start, gap.end).flatMap((turn) => turn.messages);
-				summary = await generateBoundedSideSummary(removable, model, settings, apiKey, headers, signal, parent);
+				summary = await generateBoundedSideSummary(
+					removable,
+					model,
+					settings,
+					apiKey,
+					headers,
+					signal,
+					parent,
+					onCompletion,
+				);
 				if (summary === undefined) return undefined;
 				summaryCache.set(key, summary);
 			}
@@ -497,6 +509,14 @@ export function startSideQuestion(
 		.then(async () => {
 			throwIfAborted(runAbort.signal);
 			let contextMessages = [...mainMessages, ...previousTurnMessages];
+			// Completions the run paid for that are not the answer the user keeps:
+			// compaction summaries, and an overflowing answer replaced by the retry.
+			// They are returned as strings or overwritten, so without collecting them
+			// here the transcript would undercount the most expensive /btw runs.
+			const auxiliaryCompletions: AssistantMessage[] = [];
+			const collectCompletion = (message: AssistantMessage) => {
+				auxiliaryCompletions.push(message);
+			};
 			const needsAnswerHeadroom = requestTokens > model.contextWindow - model.maxTokens - SIDE_ANSWER_SAFETY_TOKENS;
 			if (
 				dependencies &&
@@ -514,6 +534,8 @@ export function startSideQuestion(
 						parent,
 						hiddenOverheadTokens,
 						prompt,
+						false,
+						collectCompletion,
 					)) ?? contextMessages;
 			}
 
@@ -531,8 +553,12 @@ export function startSideQuestion(
 					hiddenOverheadTokens,
 					prompt,
 					true,
+					collectCompletion,
 				);
 				if (retryContext) {
+					// The overflowing response is about to be replaced. It still spent
+					// tokens, so keep it rather than let the reassignment drop it.
+					auxiliaryCompletions.push(response);
 					answer = "";
 					response = await answerOnce(retryContext);
 					throwIfAborted(runAbort.signal);
@@ -548,7 +574,7 @@ export function startSideQuestion(
 			// unrecoverable while leaving the retry's transcript missing the turn
 			// the user actually saw.
 			if (response) {
-				dependencies?.recorder?.recordTurn(question, response);
+				dependencies?.recorder?.recordTurn(question, response, auxiliaryCompletions);
 			}
 			if (response?.stopReason === "error") {
 				dependencies?.recorder?.recordStatus("error", response.errorMessage ?? "Side question failed");
