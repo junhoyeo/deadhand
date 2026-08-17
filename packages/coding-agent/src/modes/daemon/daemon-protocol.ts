@@ -113,7 +113,14 @@ export type DaemonServerCapability =
 	// reattach always removes its source from the socket, so clients sharing a
 	// socket must switch with target attach plus refcounted source cleanup.
 	| "attach_ownership"
-	| "queue_message_mutation";
+	| "queue_message_mutation"
+	// The daemon honors paneId on start_side_question and groups a pane's turns
+	// into one stored transcript by it. Predates side_question_transcript, which
+	// only covers previousTurns, so it needs its own gate: an older daemon accepts
+	// the command and silently ignores the identity, which would split one visible
+	// conversation across transcripts on reconnect. Clients must check before
+	// sending; without it storage falls back to the previousTurns heuristic.
+	| "side_question_pane_id";
 
 export type DaemonReplayStatus = "complete" | "partial" | "unavailable";
 
@@ -153,6 +160,7 @@ export const DAEMON_DEFAULT_SERVER_CAPABILITIES: readonly DaemonServerCapability
 	"prompt_admission_cancellation",
 	"attach_ownership",
 	"queue_message_mutation",
+	"side_question_pane_id",
 ];
 
 export interface DaemonRuntimeIdentity {
