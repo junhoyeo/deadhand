@@ -1006,7 +1006,21 @@ async function bootstrapVenv(
 	const runtimeIdentity = await resolveRuntimeIdentity();
 
 	await run(uv, ["python", "install", PYTHON_VERSION]);
-	await run(uv, ["venv", venv, "--python", PYTHON_VERSION, "--seed", "--clear"]);
+	// bootstrapVenv is always handed a directory that already exists: the base
+	// path is an mkdtemp .building- directory, and a generation path also holds
+	// the .leases subdirectory. uv will not initialise a non-empty directory that
+	// is not already a virtualenv, so the target has to be emptied first.
+	//
+	// Emptying it here rather than delegating to uv is what keeps this working
+	// across uv versions: --clear stopped accepting non-virtualenv directories in
+	// uv 0.12, and the --force it suggests instead does not exist before it, so
+	// either flag breaks half the installed base. An empty target needs neither.
+	// The directory itself is recreated immediately so mkdtemp keeps owning the
+	// collision-free name, and .leases is restored by writeKernelGenerationLease's
+	// recursive mkdir exactly as it was when uv did the clearing.
+	await rm(venv, { recursive: true, force: true });
+	await mkdir(venv, { recursive: true });
+	await run(uv, ["venv", venv, "--python", PYTHON_VERSION, "--seed"]);
 	await run(uv, [
 		"pip",
 		"install",
