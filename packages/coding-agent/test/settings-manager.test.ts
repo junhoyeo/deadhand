@@ -275,6 +275,42 @@ describe("SettingsManager", () => {
 		});
 	});
 
+	describe("retry", () => {
+		it("defaults the agent-level backoff ceiling to 60s", () => {
+			const manager = SettingsManager.create(projectDir, agentDir);
+
+			expect(manager.getRetrySettings()).toEqual({
+				enabled: true,
+				maxRetries: 3,
+				baseDelayMs: 2000,
+				maxBackoffMs: 60000,
+			});
+		});
+
+		it("reads an explicit maxBackoffMs, including 0 to disable the cap", () => {
+			writeFileSync(
+				join(agentDir, "settings.json"),
+				JSON.stringify({ retry: { maxRetries: 30, baseDelayMs: 1000, maxBackoffMs: 0 } }),
+			);
+			const manager = SettingsManager.create(projectDir, agentDir);
+
+			expect(manager.getRetrySettings()).toEqual({
+				enabled: true,
+				maxRetries: 30,
+				baseDelayMs: 1000,
+				maxBackoffMs: 0,
+			});
+		});
+
+		it("keeps the legacy maxDelayMs migration pointed at the provider cap", () => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ retry: { maxDelayMs: 5000 } }));
+			const manager = SettingsManager.create(projectDir, agentDir);
+
+			expect(manager.getRetrySettings().maxBackoffMs).toBe(60000);
+			expect(manager.getProviderRetrySettings().maxRetryDelayMs).toBe(5000);
+		});
+	});
+
 	describe("recentModels", () => {
 		it("records most-recently-used first, dedupes, and persists", async () => {
 			const manager = SettingsManager.create(projectDir, agentDir);
