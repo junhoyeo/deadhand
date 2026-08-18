@@ -10277,7 +10277,10 @@ export class AgentSession {
 			return false;
 		}
 
-		const delayMs = settings.baseDelayMs * 2 ** (this._retryAttempt - 1);
+		// Exponential backoff, capped: without a ceiling a large maxRetries stops
+		// being a retry policy (attempt 30 at a 1s base waits ~6000 days).
+		const uncappedDelayMs = settings.baseDelayMs * 2 ** (this._retryAttempt - 1);
+		const delayMs = settings.maxBackoffMs > 0 ? Math.min(uncappedDelayMs, settings.maxBackoffMs) : uncappedDelayMs;
 
 		this._emit({
 			type: "auto_retry_start",

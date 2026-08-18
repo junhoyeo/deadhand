@@ -37,6 +37,7 @@ export interface RetrySettings {
 	enabled?: boolean; // default: true
 	maxRetries?: number; // default: 3
 	baseDelayMs?: number; // default: 2000 (exponential backoff: 2s, 4s, 8s)
+	maxBackoffMs?: number; // default: 60000 (ceiling for the agent-level backoff; 0 disables the cap)
 	provider?: ProviderRetrySettings;
 }
 
@@ -921,11 +922,12 @@ export class SettingsManager {
 		this.save();
 	}
 
-	getRetrySettings(): { enabled: boolean; maxRetries: number; baseDelayMs: number } {
+	getRetrySettings(): { enabled: boolean; maxRetries: number; baseDelayMs: number; maxBackoffMs: number } {
 		return {
 			enabled: this.getRetryEnabled(),
 			maxRetries: this.settings.retry?.maxRetries ?? 3,
 			baseDelayMs: this.settings.retry?.baseDelayMs ?? 2000,
+			maxBackoffMs: this.settings.retry?.maxBackoffMs ?? 60000,
 		};
 	}
 
