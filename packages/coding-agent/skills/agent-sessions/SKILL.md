@@ -1,6 +1,6 @@
 ---
 name: agent-sessions
-description: Grep and read local coding-agent session transcripts - Codex CLI (~/.codex/sessions), Claude Code (~/.claude/projects), Kimi CLI (~/.kimi/sessions), Kimi Code (~/.kimi-code/sessions), Kiro CLI (~/.kiro/sessions/cli), and Prime Agent itself (~/.prime/agent/sessions and its sub-agent artifacts). Use when the user asks what a previous or concurrent agent session was doing, to resume or pick up context from another harness, to audit what Prime Agent itself ran (IPython code, tool durations), to find which session touched a file, repo, error, or topic, or to summarize a rollout/wire/context JSONL transcript.
+description: Grep and read local coding-agent session transcripts - Codex CLI (~/.codex/sessions), Claude Code (~/.claude/projects), Kimi CLI (~/.kimi/sessions), Kimi Code (~/.kimi-code/sessions), Kiro CLI (~/.kiro/sessions/cli), Senpi (~/.senpi/agent/sessions), and Prime Agent itself (~/.prime/agent/sessions and its sub-agent artifacts). Use when the user asks what a previous or concurrent agent session was doing, to resume or pick up context from another harness, to audit what Prime Agent itself ran (IPython code, tool durations), to find which session touched a file, repo, error, or topic, or to summarize a rollout/wire/context JSONL transcript.
 ---
 
 # Agent Sessions
@@ -18,6 +18,7 @@ Transcripts are **read-only evidence** — never edit or delete them.
 | `kimi-code` | `~/.kimi-code/sessions/<workdir>/<session>/agents/<agent>/` | `wire.jsonl` |
 | `kiro-cli` | `~/.kiro/sessions/cli/` | `<uuid>.jsonl` (+ `<uuid>.json` sidecar) |
 | `prime` | `~/.prime/agent/sessions/` and `~/.prime/agent/session-artifacts/<parent>/sub-<child>/` | `<uuid>.jsonl` |
+| `senpi` | `~/.senpi/agent/sessions/<flattened-cwd>/` | `<ISO-ts>_<uuid>.jsonl` |
 
 Prime Agent's own transcripts are indexed too, so this skill can audit the
 harness it runs in: the `tool_call` text is the exact IPython source that was
@@ -64,7 +65,7 @@ Shell form (flags only — the CLI takes no positional arguments):
 `session` accepts a full path, a session id, or an id prefix (a transcript whose
 own filename carries the id wins over one that only mentions it in a parent
 directory). `harness` accepts `all` or a comma list of `codex, claude, kimi,
-kimi-code, kiro-cli, prime`. `kinds` is one of `all,
+kimi-code, kiro-cli, prime, senpi`. `kinds` is one of `all,
 chat, user, assistant, reasoning, tools, tool_call, system` (grep defaults to
 `all`, show to `chat`).
 
@@ -108,6 +109,14 @@ hits = grep_sessions("playwright", project="my-app", days=2)
 `None` unless the harness records tool wall time (Prime does).
 
 ## Notes
+
+- Senpi is built from the same coding-agent package as Prime, so its records (`session`,
+  `session_info`, `message`, `custom`) parse with the Prime reader unchanged. Two differences are
+  handled: its filename is `<ISO-ts>_<uuid>` so the id comes from the `session` record, and it
+  names a session only *after* the first exchange — `session_info` sits at record ~20-150, so the
+  metadata probe reads 400 records for `senpi` where 12 suffice for `prime`. The glob is
+  deliberately `sessions/*/*.jsonl`, which excludes the sibling
+  `<cwd>/extensions/goal/*.history.jsonl` extension-state files.
 
 - grep skips whole transcripts with a raw-byte prefilter before parsing, and
   probes both the literal and its JSON-escaped form, so non-ASCII patterns

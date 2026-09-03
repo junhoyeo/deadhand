@@ -32,6 +32,12 @@ HARNESS_GLOBS: dict[str, list[str]] = {
         ".prime/agent/sessions/*.jsonl",
         ".prime/agent/session-artifacts/**/sub-*/*.jsonl",
     ],
+    # Senpi: ~/.senpi/agent/sessions/<flattened-cwd>/<ISO-ts>_<uuid>.jsonl. Senpi is built from
+    # the same coding-agent package as Prime, so the record shape is identical (`session`,
+    # `session_info`, `message`, `custom`) and `_parse_prime` reads it unchanged. The tight
+    # `*/*.jsonl` matters: it excludes the sibling `<cwd>/extensions/goal/*.history.jsonl`
+    # files, which are extension state and not transcripts.
+    "senpi": [".senpi/agent/sessions/*/*.jsonl"],
 }
 
 HARNESSES = tuple(HARNESS_GLOBS)
@@ -797,6 +803,7 @@ PARSERS: dict[str, Callable[[Path, Iterable[dict[str, Any]], Session], None]] = 
     "kimi-code": _parse_kimi,
     "kiro-cli": _parse_kiro,
     "prime": _parse_prime,
+    "senpi": _parse_prime,
 }
 
 
@@ -836,9 +843,14 @@ def _cheap_metadata(harness: str, path: Path) -> tuple[str, str, str]:
                 if cwd and title:
                     break
             cwd = cwd or path.parent.name
-        elif harness == "prime":
-            session_id = path.stem
-            for record in _read_jsonl(path, limit=12):
+        elif harness in ("prime", "senpi"):
+            # Senpi's filename is `<ISO-ts>_<uuid>`, so the stem is only a fallback; the
+            # `session` record below carries the real id.
+            session_id = path.stem.split("_", 1)[-1] if harness == "senpi" else path.stem
+            # Prime writes `session_info` up front; Senpi names the session only after the
+            # first exchange, so its title sits at record ~20-150 and a 12-record probe
+            # returned an empty title for every session.
+            for record in _read_jsonl(path, limit=12 if harness == "prime" else 400):
                 rtype = record.get("type")
                 if rtype == "session":
                     session_id = record.get("id") or session_id
