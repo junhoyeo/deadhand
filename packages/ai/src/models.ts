@@ -52,7 +52,11 @@ export function supportsFastMode<TApi extends Api>(model: Model<TApi>): boolean 
 	return (
 		model.provider === "openai-codex" &&
 		model.api === "openai-codex-responses" &&
-		(model.id === "gpt-5.4" || model.id === "gpt-5.5" || model.id === "gpt-5.6" || model.id.startsWith("gpt-5.6-"))
+		(model.id === "gpt-5.4" ||
+			model.id === "gpt-5.5" ||
+			model.id === "gpt-5.6" ||
+			model.id.startsWith("gpt-5.6-") ||
+			model.id === "gpt-6-astra")
 	);
 }
 

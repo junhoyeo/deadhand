@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Added `/fast` support for GPT-6 Astra with ChatGPT authentication.
 - Added `compat.supportsFastMode` in `models.json` so `/fast` works for an `openai-responses` model served through a proxy or gateway that forwards `service_tier`.
 - Fixed `/btw` side panes remaining stuck in a running state when the final daemon event was lost during reconnect.
 - Fixed multi-turn `/btw` side conversations exhausting large model contexts by compacting their transient in-memory history while preserving recent follow-ups.
