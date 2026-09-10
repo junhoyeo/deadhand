@@ -11,6 +11,7 @@
 - Changed `rlm.list_subagents()` to distinguish process-local queued children from running ones and include bounded failure details while the parent tracks the run.
 - Fixed prompts to archived daemon sessions failing with unknown-session errors instead of reviving the saved session.
 - Added `retry.maxBackoffMs` (default 60s) to cap agent-level retry backoff so a large `retry.maxRetries` keeps retrying on a bounded interval instead of sleeping for days.
+- Fixed authentication failures marking configured credentials as expired, so a later prompt can retry a recovered gateway without signing in again.
 
 ## [0.7.2] - 2026-08-11
 
